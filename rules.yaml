@@ -1,0 +1,42 @@
+# 股票初级预测验证系统 — 冻结规则 v1.0
+# 冻结日期: 2026-09-01。此文件为规则真源，验证期内不得修改（修改=作废重新开始）。
+
+pool:
+  rule: "沪深300成分股，按成分券代码升序，取前100只"   # 规则化定义，无人工挑选
+  source: "中证指数官网 via akshare index_stock_cons_csindex('000300')"
+  snapshot_file: "pool/pool_2026-09-01.csv"
+  rebalance: "跟随中证指数半年度调整，调整需记录日志"
+
+prediction:
+  target: "P(未来N个交易日相对沪深300超额收益 > 0)"   # 相对表述=合规安全
+  horizons_trading_days: [5, 10, 20]
+  output: "p ∈ [0,1]，两位小数 + 证据清单"
+  forbidden_words: ["买入", "卖出", "加仓", "减仓", "目标价", "建议持有"]
+
+settlement:
+  price: "T+N 后复权收盘价"
+  benchmark: "沪深300指数 (000300) 同期收益"
+  suspension: "停牌顺延至复牌日结算；停牌超20个交易日记无效样本"
+
+scoring:
+  metrics: ["Brier Score", "Log Loss", "可靠性曲线"]
+  banned_metric: "单独的方向命中率"
+  baselines:
+    base_rate: "p = 0.50 恒定"
+    momentum: "过去20日超额收益>0 → p=0.55，否则 p=0.45"
+
+model:
+  primary: "anthropic/claude-fable-5 via OpenRouter"
+  temperature: 0.2
+  thinking: false          # 验证期关思考，控成本+可比性
+  version_freeze: "验证期内换模型=新一列记录，不覆盖旧记录"
+
+data:
+  price_source: "akshare stock_zh_a_hist(adjust='hfq')，东财源，重试3次"
+  news: "v0 暂不接入（无PIT新闻管道前不喂新闻，防泄漏）"
+  snapshot: "确定性指标快照为唯一数字真源，LLM不得自行报价格数字"
+
+log:
+  file: "logs/predictions.md"
+  format: "[date | code | N | model | p | pending] → 结算后 [... | outcome | raw% | alpha% | resolved:date]"
+  policy: "append-only；结算用原子替换；git commit 作防篡改时间戳"
